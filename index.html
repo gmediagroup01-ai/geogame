@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>GeoGame</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:Arial, sans-serif; }
+        #map { width:100%; height:100vh; }
+        .status {
+            position:fixed; top:10px; left:50%; transform:translateX(-50%);
+            background:#000; color:#fff; padding:8px 16px;
+            border-radius:20px; font-size:13px; z-index:1000;
+        }
+        .controls {
+            position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+            display:flex; gap:10px; z-index:1000;
+        }
+        .btn {
+            padding:14px 20px; font-size:15px; border:none; border-radius:25px;
+            color:#fff; font-weight:bold; cursor:pointer;
+        }
+        .btn-start { background:#22c55e; }
+        .btn-stop { background:#ef4444; display:none; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="status" id="status">Геолокация...</div>
+    <div class="controls">
+        <button class="btn btn-start" id="start">🏴 Начать</button>
+        <button class="btn btn-stop" id="stop">✅ Завершить</button>
+    </div>
+
+    <script>
+        const map = L.map('map').setView([55.75, 37.62], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+            attribution:'© OSM'
+        }).addTo(map);
+
+        let track = [], tracking = false, polyline = null;
+
+        function setStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        function onPos(pos) {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const acc = pos.coords.accuracy;
+            setStatus('GPS: ' + lat.toFixed(5) + ', ' + lng.toFixed(5) + ' (±' + Math.round(acc) + 'м)');
+            map.setView([lat, lng], 16);
+            if (tracking) {
+                track.push([lat, lng]);
+                if (polyline) polyline.setLatLngs(track);
+            }
+        }
+
+        if ("geolocation" in navigator) {
+    console.log("Геолокация поддерживается, запрашиваем...");
+    navigator.geolocation.watchPosition(
+        onPos,
+        function(err) {
+            console.log("ОШИБКА:", err.code, err.message);
+            setStatus("Ошибка: " + err.code);
+            // 🔧 Если ошибка — пытаемся снова через 3 секунды
+            setTimeout(function() {
+                console.log("Перезапрос геолокации...");
+                navigator.geolocation.getCurrentPosition(
+                    onPos,
+                    function(err2) {
+                        console.log("Второй раз ошибка:", err2.code);
+                    },
+                    {enableHighAccuracy: true, timeout: 10000}
+                );
+            }, 3000);
+        },
+        {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 10000
+        }
+    );
+} else {
+    setStatus("Геолокация не поддерживается");
+}
+
+        document.getElementById('start').onclick = function() {
+            tracking = true;
+            track = [];
+            if (polyline) map.removeLayer(polyline);
+            polyline = L.polyline([], {color:'#ff6600', weight:4}).addTo(map);
+            document.getElementById('start').style.display = 'none';
+            document.getElementById('stop').style.display = 'inline-block';
+            setStatus("Захват начат — двигайся!");
+        };
+
+        document.getElementById('stop').onclick = function() {
+            tracking = false;
+            document.getElementById('start').style.display = 'inline-block';
+            document.getElementById('stop').style.display = 'none';
+            if (track.length < 3) {
+                setStatus("Мало точек!");
+                return;
+            }
+            const closed = [...track, track[0]];
+            L.polygon(closed, {color:'#22c55e', fillOpacity:0.3}).addTo(map);
+            setStatus('Захват завершён! Точек: ' + track.length);
+        };
+    </script>
+</body>
+</html>
